@@ -30,3 +30,16 @@
 *.exe
 *.out
 *.app
+*.exp
+*.pdb
+
+# Non-coding files
+*.pdf 
+*.zip 
+*.tar 
+*tar.gz
+*.txt 
+*.csv
+PartA/__MACOSX/*
+Part*/.vscode/*
+*.ncu-proj
