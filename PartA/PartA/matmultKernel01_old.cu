@@ -53,14 +53,14 @@ __global__ void MatMulKernel(Matrix A, Matrix B, Matrix C){
 
     // Each thread copies just one element of shared_A and one element of shared_B
     shared_A[thread_row][thread_col] = Asub[thread_row * A.stride + thread_col];
-    shared_A[thread_row][thread_col+1] = Asub[thread_row * A.stride + thread_col + 1];
-    shared_A[thread_row+1][thread_col] = Asub[(thread_row+1) * A.stride + thread_col];
-    shared_A[thread_row+1][thread_col+1] = Asub[(thread_row+1) * A.stride + thread_col + 1];
+    shared_A[thread_row][thread_col+FOOTPRINT_SIZE/2] = Asub[thread_row * A.stride + thread_col + FOOTPRINT_SIZE/2];
+    shared_A[thread_row+FOOTPRINT_SIZE/2][thread_col] = Asub[(thread_row+FOOTPRINT_SIZE/2) * A.stride + thread_col];
+    shared_A[thread_row+FOOTPRINT_SIZE/2][thread_col+FOOTPRINT_SIZE/2] = Asub[(thread_row+FOOTPRINT_SIZE/2) * A.stride + thread_col + FOOTPRINT_SIZE/2];
 
     shared_B[thread_row][thread_col] = Bsub[thread_row * B.stride + thread_col];
-    shared_B[thread_row][thread_col+1] = Bsub[thread_row * B.stride + thread_col + 1];
-    shared_B[thread_row+1][thread_col] = Bsub[(thread_row+1) * B.stride + thread_col];
-    shared_B[thread_row+1][thread_col+1] = Bsub[(thread_row+1) * B.stride + thread_col + 1];
+    shared_B[thread_row][thread_col+FOOTPRINT_SIZE/2] = Bsub[thread_row * B.stride + thread_col + FOOTPRINT_SIZE/2];
+    shared_B[thread_row+FOOTPRINT_SIZE/2][thread_col] = Bsub[(thread_row+FOOTPRINT_SIZE/2) * B.stride + thread_col];
+    shared_B[thread_row+FOOTPRINT_SIZE/2][thread_col+FOOTPRINT_SIZE/2] = Bsub[(thread_row+FOOTPRINT_SIZE/2) * B.stride + thread_col + FOOTPRINT_SIZE/2];
 
     // Synchronize to ensure all elements are read
     __syncthreads();
@@ -70,9 +70,9 @@ __global__ void MatMulKernel(Matrix A, Matrix B, Matrix C){
 #pragma unroll
     for(int e=0; e<FOOTPRINT_SIZE; ++e){
         Cvalues[0][0] += shared_A[thread_row][e] * shared_B[e][thread_col];
-        Cvalues[0][1] += shared_A[thread_row][e] * shared_B[e][thread_col+1];
-        Cvalues[1][0] += shared_A[thread_row+1][e] * shared_B[e][thread_col];
-        Cvalues[1][1] += shared_A[thread_row+1][e] * shared_B[e][thread_col+1];
+        Cvalues[0][1] += shared_A[thread_row][e] * shared_B[e][thread_col+FOOTPRINT_SIZE/2];
+        Cvalues[1][0] += shared_A[thread_row+FOOTPRINT_SIZE/2][e] * shared_B[e][thread_col];
+        Cvalues[1][1] += shared_A[thread_row+FOOTPRINT_SIZE/2][e] * shared_B[e][thread_col+FOOTPRINT_SIZE/2];
     }
       //  Cvalue += shared_A[thread_row][e] * shared_B[e][thread_col];
 
@@ -85,8 +85,8 @@ __global__ void MatMulKernel(Matrix A, Matrix B, Matrix C){
   // Each thread writes its own cell value.
   // Csub[thread_row * C.stride + thread_col] = Cvalue;
   Csub[thread_row * C.stride + thread_col] = Cvalues[0][0];
-  Csub[thread_row * C.stride + thread_col+1] = Cvalues[0][1];
-  Csub[(thread_row+1) * C.stride + thread_col] = Cvalues[1][0];
-  Csub[(thread_row+1) * C.stride + thread_col+1] = Cvalues[1][1];
+  Csub[thread_row * C.stride + thread_col+FOOTPRINT_SIZE/2] = Cvalues[0][1];
+  Csub[(thread_row+FOOTPRINT_SIZE/2) * C.stride + thread_col] = Cvalues[1][0];
+  Csub[(thread_row+FOOTPRINT_SIZE/2) * C.stride + thread_col+FOOTPRINT_SIZE/2] = Cvalues[1][1];
 }
 

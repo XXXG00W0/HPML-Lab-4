@@ -8,34 +8,78 @@ __global__ void basicConvolution2d(const InputTensor in_tensor, const FilterTens
     int out_y = blockIdx.y * blockDim.y + threadIdx.y;
     int out_k = blockIdx.z;
 
+    if (out_x >= out_tensor.W || out_y >= out_tensor.H) return;
+
     double conv_sum = 0.0;
 
-    int out_pos, filter_pos, in_pos;
     for (int c = 0; c < in_tensor.C; ++c){
-        for (int j = 0; j < in_tensor.H; ++j){
-            for (int i = 0; i < in_tensor.W; ++i){
-                filter_pos = out_k * filter.C * filter.FW * filter.FH + c * filter.FW * filter.FH + 
-                            (filter.FW - 1 - i) * filter.FH + (filter.FH - 1 - j);
-                in_pos = c * in_tensor.H * in_tensor.W + (out_x + i) * in_tensor.W + (out_y + j);
-                conv_sum += filter.elements[filter_pos] * in_tensor.elements[in_pos];
+        for (int j = 0; j < filter.FH; ++j){
+            for (int i = 0; i < filter.FW; ++i){
+
+                // calcualte the position of the filter
+                int filter_pos = out_k * filter.C * filter.FW * filter.FH 
+                            + c * filter.FW * filter.FH
+                            + j * filter.FW + i;
+
+                // calculate the position of the input tensor
+                int in_x = out_x + i - filter.FW/2;
+                int in_y = out_y + j - filter.FH/2;
+                
+                // check if the position is valid
+                if (in_x >= 0 && in_x < in_tensor.W && in_y > 0 && in_y < in_tensor.H){
+                    int in_pos = c * in_tensor.H * in_tensor.W + in_y * in_tensor.W + in_x;
+                    conv_sum += filter.elements[filter_pos] * in_tensor.elements[in_pos];
+                } 
             }
         }
     }
     
-    out_pos = out_k * out_tensor.H * out_tensor.W + out_x * out_tensor.W + out_y;
+    int out_pos = out_k * out_tensor.H * out_tensor.W + out_x * out_tensor.W + out_y;
     out_tensor.elements[out_pos] = conv_sum;
     
 }
 
-__global__ void tiledConvolution2d(const InputTensor in_tensor, const FilterTensor filter_tensor, OutputTensor out_tensor){
+__global__ void tiledConvolution2d(const InputTensor in_tensor, const FilterTensor filter, OutputTensor out_tensor){
     float *in_sub, *out_sub;
 
+    int out_x = blockIdx.x * blockDim.x + threadIdx.x;
+    int out_y = blockIdx.y * blockDim.y + threadIdx.y;
+    int out_k = blockIdx.z;
+
+    int shared_y = threadIdx.y + filter.FH/2;
+    int shared_x = threadIdx.x + filter.FW/2;
+
     __shared__ double in_shared[BLOCK_SIZE+2][BLOCK_SIZE+2];
-    // __shared__ double filter_shared
+    __shared__ double filter_shared[BLOCK_SIZE][BLOCK_SIZE];
 
-    in_shared[out_x]
+    // load input tensor to shared memory
+    // assumed that in_tensor is padded
+    if (out_x < in_tensor.W && out_y < in_tensor.H){
+        in_shared[shared_x][shared_y] = in_tensor.elements[out_x * in_tensor.W + out_y];
+    }
 
+    // load filter tensor to shared memory
+    if (shared_x < filter.FW && shared_y < filter.FH){
+        filter_shared[shared_x][shared_y] = filter.elements[out_k * filter.C * filter.FW * filter.FH + shared_x * filter.FW + shared_y];
+    }
+
+    __syncthreads();
+
+    // calculate the convolution
     double conv_sum = 0.0;
+    if (out_x < out_tensor.W && out_y < out_tensor.H){
+        for (int c = 0; c < in_tensor.C; ++c){
+            for (int j = 0; j < in_tensor.H; ++j){
+                for (int i = 0; i < in_tensor.W; ++i){
+                    conv_sum += filter_shared[j][i] * in_shared[shared_x + i][shared_y + j];
+                }
+            }
+        }
+    }
+
+    // store the result
+    int out_pos = out_k * out_tensor.H * out_tensor.W + out_x * out_tensor.W + out_y;
+    out_tensor.elements[out_pos] = conv_sum;
 }
 
 __host__ InputTensor tensorPadding(const InputTensor in_tensor){

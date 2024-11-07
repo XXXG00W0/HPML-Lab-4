@@ -5,6 +5,9 @@
 
 #ifndef BLOCK_SIZE
 #define BLOCK_SIZE 16
+// #define FH 3
+// #define FW 3
+// #define K 64
 #endif
 
 typedef struct {
